@@ -1,0 +1,13 @@
+{
+  "name": "calcul-stock-nounou",
+  "version": "1.0.0",
+  "description": "Application MERN complète de gestion de stock avec double emplacement (entrepôt et magasin), historique et import/export Excel",
+  "scripts": {
+    "build": "npm run build --prefix frontend",
+    "install:all": "npm install --prefix backend && npm install --prefix frontend",
+    "seed": "npm run seed --prefix backend",
+    "clean": "npm run clean --prefix backend",
+    "backend": "npm run dev --prefix backend",
+    "frontend": "npm run dev --prefix frontend"
+  }
+}
