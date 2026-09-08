@@ -5,7 +5,7 @@ export default function Navbar({ currentTab, onSelectTab, userRole = 'admin', on
   const navItems = [
     { id: 'products', label: 'Stocks & Produits', shortLabel: 'Stocks', icon: Boxes },
     { id: 'observations', label: "Journal Observations", shortLabel: 'Journal', icon: ClipboardList, badge: 'Magasin' },
-    { id: 'loss-analysis', label: 'Pertes & Inventaire', shortLabel: 'Pertes', icon: Scale, badge: 'Audit' },
+    { id: 'loss-analysis', label: 'Diagnostic & Inventaire', shortLabel: 'Diagnostic', icon: Scale, badge: 'Audit' },
     { id: 'repair', label: 'Espace Réparateurs', shortLabel: 'Atelier', icon: Wrench, badge: 'Atelier' },
     { id: 'history', label: 'Historique', shortLabel: 'Historique', icon: History },
     { id: 'categories', label: 'Catégories', shortLabel: 'Catégories', icon: Layers }

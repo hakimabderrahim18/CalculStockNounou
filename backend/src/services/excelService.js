@@ -444,6 +444,7 @@ const compareStockWithSpreadsheet = async (fileBuffer, { performedBy = 'Admin', 
     const priceVal = colMap.price !== -1 ? row[colMap.price] : 0;
     const brandRaw = colMap.brand !== -1 ? row[colMap.brand] : '';
     const catRaw = colMap.category !== -1 ? row[colMap.category] : '';
+    const subCatRaw = colMap.subCategory !== -1 ? row[colMap.subCategory] : '';
 
     const name = nameRaw ? nameRaw.toString().trim() : '';
     const sku = skuRaw ? skuRaw.toString().trim().toUpperCase() : '';
@@ -451,6 +452,7 @@ const compareStockWithSpreadsheet = async (fileBuffer, { performedBy = 'Admin', 
     const filePrice = Math.max(0, parseCleanNumber(priceVal));
     const brand = brandRaw ? brandRaw.toString().trim() : '';
     const categoryName = catRaw ? catRaw.toString().trim() : '';
+    const subCategoryName = subCatRaw ? subCatRaw.toString().trim() : '';
 
     if (!name && !sku && stockVal === '') continue;
 
@@ -492,6 +494,7 @@ const compareStockWithSpreadsheet = async (fileBuffer, { performedBy = 'Admin', 
         sku: product.sku,
         brand: product.brand || brand,
         categoryName: product.categoryId?.name || categoryName || 'Général',
+        subCategoryName: product.subCategoryId?.name || subCategoryName || '',
         price: unitPrice,
         appWarehouseStock: appWarehouse,
         appStoreStock: appStore,
@@ -515,6 +518,7 @@ const compareStockWithSpreadsheet = async (fileBuffer, { performedBy = 'Admin', 
         sku: sku || 'SANS-SKU',
         brand,
         categoryName: categoryName || 'Non référencé',
+        subCategoryName: subCategoryName || '',
         price: unitPrice,
         appWarehouseStock: 0,
         appStoreStock: 0,
@@ -547,6 +551,7 @@ const compareStockWithSpreadsheet = async (fileBuffer, { performedBy = 'Admin', 
           sku: p.sku,
           brand: p.brand || '',
           categoryName: p.categoryId?.name || 'Général',
+          subCategoryName: p.subCategoryId?.name || '',
           price: p.price || 0,
           appWarehouseStock: appWarehouse,
           appStoreStock: appStore,
@@ -603,7 +608,8 @@ const exportAuditToExcel = async (audit) => {
     'Réf / SKU',
     'Désignation',
     'Marque',
-    'Catégorie',
+    'Famille (Catégorie)',
+    'Sous-Famille',
     'Stock Entrepôt',
     'Stock Magasin',
     'Stock Total Logiciel',
@@ -616,7 +622,8 @@ const exportAuditToExcel = async (audit) => {
     { key: 'sku', width: 18 },
     { key: 'name', width: 28 },
     { key: 'brand', width: 16 },
-    { key: 'category', width: 18 },
+    { key: 'category', width: 20 },
+    { key: 'subCategory', width: 20 },
     { key: 'appWarehouse', width: 16 },
     { key: 'appStore', width: 16 },
     { key: 'appTotal', width: 18 },
@@ -638,6 +645,7 @@ const exportAuditToExcel = async (audit) => {
       name: item.name,
       brand: item.brand || '-',
       category: item.categoryName || '-',
+      subCategory: item.subCategoryName || '-',
       appWarehouse: item.appWarehouseStock,
       appStore: item.appStoreStock,
       appTotal: item.appTotalStock,

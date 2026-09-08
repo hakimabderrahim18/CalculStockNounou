@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   TrendingDown,
   TrendingUp,
@@ -16,6 +16,8 @@ import {
   History,
   X,
   Layers,
+  FolderTree,
+  RotateCcw,
   ArrowUpDown,
   Check
 } from 'lucide-react';
@@ -47,6 +49,8 @@ export default function LossAnalysisPage({ onShowToast }) {
   // Filtres de la table active
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL'); // ALL, LOSS, SURPLUS, EXACT, NOT_FOUND_IN_APP
+  const [categoryFilter, setCategoryFilter] = useState('ALL'); // Famille / Catégorie
+  const [subCategoryFilter, setSubCategoryFilter] = useState('ALL'); // Sous-Famille
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
@@ -178,9 +182,69 @@ export default function LossAnalysisPage({ onShowToast }) {
 
   // Filtrage des articles comparés
   const items = currentAudit?.items || [];
+
+  // Extraire la liste unique des Familles (Catégories) disponibles dans l'analyse
+  const availableCategories = useMemo(() => {
+    const cats = new Set();
+    items.forEach((item) => {
+      const c = item.categoryName?.trim();
+      if (c) cats.add(c);
+    });
+    return Array.from(cats).sort((a, b) => a.localeCompare(b, 'fr'));
+  }, [items]);
+
+  // Extraire la liste unique des Sous-Familles disponibles (dépendant de la Famille si sélectionnée)
+  const availableSubCategories = useMemo(() => {
+    const subCats = new Set();
+    items.forEach((item) => {
+      if (categoryFilter !== 'ALL' && (item.categoryName?.trim() || 'Général') !== categoryFilter) {
+        return;
+      }
+      const sc = item.subCategoryName?.trim();
+      if (sc) subCats.add(sc);
+    });
+    return Array.from(subCats).sort((a, b) => a.localeCompare(b, 'fr'));
+  }, [items, categoryFilter]);
+
+  // Changement de Famille / Catégorie
+  const handleCategoryChange = (cat) => {
+    setCategoryFilter(cat);
+    setSubCategoryFilter('ALL');
+    setCurrentPage(1);
+  };
+
+  // Changement de Sous-Famille
+  const handleSubCategoryChange = (subCat) => {
+    setSubCategoryFilter(subCat);
+    setCurrentPage(1);
+  };
+
+  // Réinitialiser tous les filtres
+  const resetAllFilters = () => {
+    setSearchTerm('');
+    setStatusFilter('ALL');
+    setCategoryFilter('ALL');
+    setSubCategoryFilter('ALL');
+    setCurrentPage(1);
+  };
+
+  const isFiltered =
+    searchTerm.trim() !== '' ||
+    statusFilter !== 'ALL' ||
+    categoryFilter !== 'ALL' ||
+    subCategoryFilter !== 'ALL';
+
   const filteredItems = items.filter((item) => {
     // Filtre statut
     if (statusFilter !== 'ALL' && item.status !== statusFilter) {
+      return false;
+    }
+    // Filtre Famille (Catégorie)
+    if (categoryFilter !== 'ALL' && (item.categoryName?.trim() || 'Général') !== categoryFilter) {
+      return false;
+    }
+    // Filtre Sous-Famille
+    if (subCategoryFilter !== 'ALL' && (item.subCategoryName?.trim() || '') !== subCategoryFilter) {
       return false;
     }
     // Recherche textuelle
@@ -189,7 +253,9 @@ export default function LossAnalysisPage({ onShowToast }) {
       const matchSku = item.sku?.toLowerCase().includes(term);
       const matchName = item.name?.toLowerCase().includes(term);
       const matchBrand = item.brand?.toLowerCase().includes(term);
-      return matchSku || matchName || matchBrand;
+      const matchCat = item.categoryName?.toLowerCase().includes(term);
+      const matchSubCat = item.subCategoryName?.toLowerCase().includes(term);
+      return matchSku || matchName || matchBrand || matchCat || matchSubCat;
     }
     return true;
   });
@@ -452,49 +518,123 @@ export default function LossAnalysisPage({ onShowToast }) {
               {/* Table des Écarts & Décalages */}
               <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
                 {/* Barre de filtres et recherche */}
-                <div className="p-3.5 sm:p-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-slate-50/50">
-                  {/* Champ de recherche */}
-                  <div className="relative flex-1 max-w-sm">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      placeholder="Filtrer par nom, référence/SKU, marque..."
-                      value={searchTerm}
-                      onChange={(e) => {
-                        setSearchTerm(e.target.value);
-                        setCurrentPage(1);
-                      }}
-                      className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-rose-500"
-                    />
-                  </div>
-
-                  {/* Filtre de Statut */}
-                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-                    <span className="text-xs text-slate-500 font-medium mr-1 flex items-center gap-1 flex-shrink-0">
-                      <Filter className="w-3.5 h-3.5" /> Statut :
-                    </span>
-                    {[
-                      { key: 'ALL', label: `Tous (${items.length})` },
-                      { key: 'LOSS', label: `Pertes (${summary.lossCount})` },
-                      { key: 'SURPLUS', label: `Surplus (${summary.surplusCount})` },
-                      { key: 'EXACT', label: `Conformes (${summary.exactCount})` },
-                      { key: 'NOT_FOUND_IN_APP', label: `Non référencés (${summary.notFoundInAppCount})` }
-                    ].map((tab) => (
-                      <button
-                        key={tab.key}
-                        onClick={() => {
-                          setStatusFilter(tab.key);
+                <div className="p-3.5 sm:p-4 border-b border-slate-200 flex flex-col gap-3 bg-slate-50/50">
+                  {/* Ligne 1 : Recherche + Statut */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    {/* Champ de recherche */}
+                    <div className="relative flex-1 max-w-sm">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        placeholder="Filtrer par nom, référence, marque, famille..."
+                        value={searchTerm}
+                        onChange={(e) => {
+                          setSearchTerm(e.target.value);
                           setCurrentPage(1);
                         }}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition cursor-pointer flex-shrink-0 ${
-                          statusFilter === tab.key
-                            ? 'bg-rose-600 text-white shadow-xs'
-                            : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
-                        }`}
-                      >
-                        {tab.label}
-                      </button>
-                    ))}
+                        className="w-full pl-9 pr-8 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-rose-500"
+                      />
+                      {searchTerm && (
+                        <button
+                          onClick={() => {
+                            setSearchTerm('');
+                            setCurrentPage(1);
+                          }}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Filtre de Statut */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+                      <span className="text-xs text-slate-500 font-medium mr-1 flex items-center gap-1 flex-shrink-0">
+                        <Filter className="w-3.5 h-3.5" /> Statut :
+                      </span>
+                      {[
+                        { key: 'ALL', label: `Tous (${items.length})` },
+                        { key: 'LOSS', label: `Pertes (${summary.lossCount})` },
+                        { key: 'SURPLUS', label: `Surplus (${summary.surplusCount})` },
+                        { key: 'EXACT', label: `Conformes (${summary.exactCount})` },
+                        { key: 'NOT_FOUND_IN_APP', label: `Non référencés (${summary.notFoundInAppCount})` }
+                      ].map((tab) => (
+                        <button
+                          key={tab.key}
+                          onClick={() => {
+                            setStatusFilter(tab.key);
+                            setCurrentPage(1);
+                          }}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition cursor-pointer flex-shrink-0 ${
+                            statusFilter === tab.key
+                              ? 'bg-rose-600 text-white shadow-xs'
+                              : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Ligne 2 : Sélecteurs Hiérarchiques Famille (Catégorie) & Sous-Famille */}
+                  <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-slate-200/60">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {/* Sélecteur Famille / Catégorie */}
+                      <div className="flex items-center gap-1.5 bg-white px-2.5 py-1.5 rounded-xl border border-slate-200 shadow-2xs">
+                        <Layers className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                        <span className="text-[11px] font-bold text-slate-600 shrink-0">Famille :</span>
+                        <select
+                          value={categoryFilter}
+                          onChange={(e) => handleCategoryChange(e.target.value)}
+                          className="text-xs font-semibold text-slate-800 bg-transparent focus:outline-none cursor-pointer max-w-[170px] truncate"
+                        >
+                          <option value="ALL">📁 Toutes les familles ({availableCategories.length})</option>
+                          {availableCategories.map((cat) => (
+                            <option key={cat} value={cat}>
+                              {cat}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Sélecteur Sous-Famille */}
+                      <div className="flex items-center gap-1.5 bg-white px-2.5 py-1.5 rounded-xl border border-slate-200 shadow-2xs">
+                        <FolderTree className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                        <span className="text-[11px] font-bold text-slate-600 shrink-0">Sous-Famille :</span>
+                        <select
+                          value={subCategoryFilter}
+                          onChange={(e) => handleSubCategoryChange(e.target.value)}
+                          disabled={availableSubCategories.length === 0}
+                          className="text-xs font-semibold text-slate-800 bg-transparent focus:outline-none cursor-pointer max-w-[170px] truncate disabled:opacity-50"
+                        >
+                          <option value="ALL">
+                            📂 {categoryFilter === 'ALL' ? 'Toutes les sous-familles' : 'Toutes de cette famille'} ({availableSubCategories.length})
+                          </option>
+                          {availableSubCategories.map((subCat) => (
+                            <option key={subCat} value={subCat}>
+                              {subCat}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Bouton Réinitialiser */}
+                      {isFiltered && (
+                        <button
+                          onClick={resetAllFilters}
+                          className="flex items-center gap-1 text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1.5 rounded-xl transition cursor-pointer"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          <span>Réinitialiser filtres</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Badge Compteur des résultats filtrés */}
+                    <div className="text-[11px] text-slate-500 font-medium">
+                      Affichage : <span className="font-bold text-slate-800">{filteredItems.length}</span> / {items.length} article(s)
+                    </div>
                   </div>
                 </div>
 
@@ -517,7 +657,7 @@ export default function LossAnalysisPage({ onShowToast }) {
                             isLoss ? 'bg-rose-50/20' : isSurplus ? 'bg-emerald-50/20' : ''
                           }`}
                         >
-                          {/* Ligne 1 : SKU + Nom + Statut Badge */}
+                          {/* Ligne 1 : SKU + Nom + Famille + Statut Badge */}
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
                               <h4 className="font-bold text-slate-900 text-sm truncate">
@@ -527,6 +667,20 @@ export default function LossAnalysisPage({ onShowToast }) {
                                 <span className="font-mono font-semibold text-slate-700">{item.sku}</span>
                                 {item.brand && <span>• {item.brand}</span>}
                               </div>
+                              {(item.categoryName || item.subCategoryName) && (
+                                <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                                  {item.categoryName && (
+                                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100">
+                                      📁 {item.categoryName}
+                                    </span>
+                                  )}
+                                  {item.subCategoryName && (
+                                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-100">
+                                      📂 {item.subCategoryName}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                             </div>
 
                             {/* Badge Statut */}
@@ -613,6 +767,7 @@ export default function LossAnalysisPage({ onShowToast }) {
                       <tr>
                         <th className="py-3 px-4">Réf / SKU</th>
                         <th className="py-3 px-4">Désignation</th>
+                        <th className="py-3 px-3">Famille & Sous-Famille</th>
                         <th className="py-3 px-3 text-right">Stock Entrepôt</th>
                         <th className="py-3 px-3 text-right">Stock Magasin</th>
                         <th className="py-3 px-3 text-right bg-slate-100 text-slate-900 font-black">
@@ -628,7 +783,7 @@ export default function LossAnalysisPage({ onShowToast }) {
                     <tbody className="divide-y divide-slate-100">
                       {paginatedItems.length === 0 ? (
                         <tr>
-                          <td colSpan="8" className="py-8 text-center text-slate-400">
+                          <td colSpan="9" className="py-8 text-center text-slate-400">
                             Aucun produit ne correspond aux filtres actuels.
                           </td>
                         </tr>
@@ -659,6 +814,24 @@ export default function LossAnalysisPage({ onShowToast }) {
                                     Marque : {item.brand}
                                   </div>
                                 )}
+                              </td>
+                              <td className="py-3 px-3 whitespace-nowrap">
+                                <div className="space-y-1">
+                                  {item.categoryName ? (
+                                    <span className="inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100">
+                                      📁 {item.categoryName}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-slate-400">-</span>
+                                  )}
+                                  {item.subCategoryName && (
+                                    <div>
+                                      <span className="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-100">
+                                        📂 {item.subCategoryName}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
                               </td>
                               <td className="py-3 px-3 text-right font-mono text-slate-600">
                                 {item.appWarehouseStock}

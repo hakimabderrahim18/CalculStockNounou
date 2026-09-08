@@ -38,6 +38,7 @@ const stockAuditSchema = new mongoose.Schema(
         sku: { type: String, required: true },
         brand: { type: String, default: '' },
         categoryName: { type: String, default: '' },
+        subCategoryName: { type: String, default: '' },
         price: { type: Number, default: 0 },
         appWarehouseStock: { type: Number, default: 0 },
         appStoreStock: { type: Number, default: 0 },
