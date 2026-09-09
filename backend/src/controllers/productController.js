@@ -379,7 +379,7 @@ const updateQuantity = async (req, res, next) => {
       reason,
       changedBy = 'Admin',
       role = 'admin',
-      deductFromWarehouse = true
+      deductFromWarehouse = false
     } = req.body;
     const productId = req.params.id;
 
@@ -431,7 +431,8 @@ const updateQuantity = async (req, res, next) => {
       });
     } else {
       // quantityType === 'STORE'
-      const shouldDeduct = deductFromWarehouse !== false && difference > 0;
+      // Déduire de l'entrepôt uniquement si explicitement demandé (deductFromWarehouse === true)
+      const shouldDeduct = deductFromWarehouse === true && difference > 0;
 
       if (shouldDeduct) {
         if (product.stockQuantity < difference) {

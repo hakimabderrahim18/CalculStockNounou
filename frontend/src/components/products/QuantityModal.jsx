@@ -4,7 +4,7 @@ import { Warehouse, Store, ArrowRight, AlertTriangle } from 'lucide-react';
 
 export default function QuantityModal({ isOpen, onClose, product, quantityType, userRole = 'admin', onSave }) {
   const [newQuantity, setNewQuantity] = useState('');
-  const [deductFromWarehouse, setDeductFromWarehouse] = useState(true);
+  const [deductFromWarehouse, setDeductFromWarehouse] = useState(false);
   const [changedBy, setChangedBy] = useState(userRole === 'magasinier' ? 'Magasinier' : userRole === 'reparateur' ? 'Réparateur' : 'Admin');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -17,7 +17,7 @@ export default function QuantityModal({ isOpen, onClose, product, quantityType, 
     if (product) {
       setNewQuantity(currentQuantity.toString());
       setError('');
-      setDeductFromWarehouse(true);
+      setDeductFromWarehouse(false);
       setChangedBy(userRole === 'magasinier' ? 'Magasinier' : userRole === 'reparateur' ? 'Réparateur' : 'Admin');
     }
   }, [product, quantityType, userRole]);
@@ -50,8 +50,8 @@ export default function QuantityModal({ isOpen, onClose, product, quantityType, 
       return;
     }
 
-    if (isWarehouseInsufficient) {
-      setError(`Stock entrepôt insuffisant : seulement ${product.stockQuantity || 0} pièce(s) disponible(s) en entrepôt pour un transfert de ${difference} pièce(s).`);
+    if (willDeductWarehouse && isWarehouseInsufficient) {
+      setError(`Stock entrepôt insuffisant : seulement ${product.stockQuantity || 0} pièce(s) disponible(s) en entrepôt. Décochez l'option pour ajouter directement au magasin sans entrepôt.`);
       return;
     }
 
@@ -66,10 +66,10 @@ export default function QuantityModal({ isOpen, onClose, product, quantityType, 
           ? 'Ajustement direct entrepôt'
           : willDeductWarehouse
           ? `Transfert Entrepôt -> Magasin (+${difference} pcs)`
-          : 'Ajustement direct magasin',
+          : 'Ajout direct magasin',
         changedBy: changedBy.trim() || (isStock ? 'Admin' : 'Magasinier'),
         role: userRole,
-        deductFromWarehouse
+        deductFromWarehouse: willDeductWarehouse
       });
       onClose();
     } catch (err) {
@@ -160,7 +160,9 @@ export default function QuantityModal({ isOpen, onClose, product, quantityType, 
           <div className={`p-3.5 rounded-xl border transition ${
             isWarehouseInsufficient && deductFromWarehouse
               ? 'bg-rose-50/80 border-rose-200'
-              : 'bg-amber-50/70 border-amber-200'
+              : deductFromWarehouse
+              ? 'bg-amber-50/70 border-amber-200'
+              : 'bg-slate-50 border-slate-200'
           }`}>
             <label className="flex items-start gap-2.5 cursor-pointer">
               <input
@@ -172,22 +174,26 @@ export default function QuantityModal({ isOpen, onClose, product, quantityType, 
               <div className="text-xs">
                 <span className="font-bold text-slate-900 flex items-center gap-1.5">
                   <Warehouse className="w-3.5 h-3.5 text-amber-700" />
-                  Déduire du stock entrepôt (Transfert)
+                  Déduire aussi du stock entrepôt (Optionnel - Transfert)
                 </span>
-                <p className="text-slate-600 mt-1">
-                  Prélève automatiquement <strong>{difference} pièce(s)</strong> de l'entrepôt pour alimenter le magasin.
+                <p className="text-slate-500 mt-1">
+                  {deductFromWarehouse
+                    ? `Les ${difference} pièce(s) seront déduites de l'entrepôt pour alimenter le magasin.`
+                    : `Ajout direct au magasin : l'entrepôt n'est pas requis (aucun stock n'est déduit de l'entrepôt).`}
                 </p>
-                <div className="mt-2 flex items-center gap-3 text-[11px] font-medium text-slate-700">
-                  <span>Disponible en entrepôt : <strong className={isWarehouseInsufficient ? 'text-rose-600 font-bold' : 'text-slate-900'}>{product.stockQuantity || 0}</strong></span>
-                  <span>↳ Restant en entrepôt : <strong className={predictedWarehouse < 0 ? 'text-rose-600' : 'text-amber-900'}>{predictedWarehouse}</strong></span>
-                </div>
+                {deductFromWarehouse && (
+                  <div className="mt-2 flex items-center gap-3 text-[11px] font-medium text-slate-700">
+                    <span>Disponible en entrepôt : <strong className={isWarehouseInsufficient ? 'text-rose-600 font-bold' : 'text-slate-900'}>{product.stockQuantity || 0}</strong></span>
+                    <span>↳ Restant en entrepôt : <strong className={predictedWarehouse < 0 ? 'text-rose-600' : 'text-amber-900'}>{predictedWarehouse}</strong></span>
+                  </div>
+                )}
               </div>
             </label>
 
             {isWarehouseInsufficient && deductFromWarehouse && (
               <div className="mt-2.5 pt-2 border-t border-rose-200 flex items-center gap-1.5 text-xs font-semibold text-rose-700">
                 <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-                <span>Stock entrepôt insuffisant ({product.stockQuantity || 0} en stock). Approvisionnez d'abord l'entrepôt ou décochez pour un ajout direct.</span>
+                <span>Stock entrepôt insuffisant ({product.stockQuantity || 0} en stock). Décochez cette option pour ajouter directement au magasin sans entrepôt.</span>
               </div>
             )}
           </div>
