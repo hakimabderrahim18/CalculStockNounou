@@ -247,15 +247,21 @@ export default function LossAnalysisPage({ onShowToast }) {
     if (subCategoryFilter !== 'ALL' && (item.subCategoryName?.trim() || '') !== subCategoryFilter) {
       return false;
     }
-    // Recherche textuelle
+    // Recherche textuelle multi-mots non ordonnée
     if (searchTerm.trim()) {
-      const term = searchTerm.toLowerCase();
-      const matchSku = item.sku?.toLowerCase().includes(term);
-      const matchName = item.name?.toLowerCase().includes(term);
-      const matchBrand = item.brand?.toLowerCase().includes(term);
-      const matchCat = item.categoryName?.toLowerCase().includes(term);
-      const matchSubCat = item.subCategoryName?.toLowerCase().includes(term);
-      return matchSku || matchName || matchBrand || matchCat || matchSubCat;
+      const words = searchTerm
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .split(/\s+/)
+        .filter(Boolean);
+
+      const targetStr = `${item.sku || ''} ${item.name || ''} ${item.brand || ''} ${item.categoryName || ''} ${item.subCategoryName || ''}`
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+
+      return words.every((w) => targetStr.includes(w));
     }
     return true;
   });

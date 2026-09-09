@@ -218,14 +218,19 @@ export default function ObservationJournalPage({ onShowToast, userRole = 'magasi
 
   const filteredObservations = observations.filter((obs) => {
     if (!searchTerm.trim()) return true;
-    const term = searchTerm.toLowerCase();
-    return (
-      obs.title?.toLowerCase().includes(term) ||
-      obs.content?.toLowerCase().includes(term) ||
-      obs.productName?.toLowerCase().includes(term) ||
-      obs.productSku?.toLowerCase().includes(term) ||
-      obs.author?.toLowerCase().includes(term)
-    );
+    const words = searchTerm
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .split(/\s+/)
+      .filter(Boolean);
+
+    const targetStr = `${obs.title || ''} ${obs.content || ''} ${obs.productName || ''} ${obs.productSku || ''} ${obs.author || ''}`
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+
+    return words.every((w) => targetStr.includes(w));
   });
 
   return (

@@ -1,6 +1,28 @@
 const HistoryLog = require('../models/HistoryLog');
 const excelService = require('../services/excelService');
 
+const escapeRegex = (string) => {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
+const makeAccentInsensitiveRegex = (term) => {
+  const accentMap = {
+    a: '[aàáâãäåā]',
+    e: '[eèéêëē]',
+    i: '[iìíîïī]',
+    o: '[oòóôõöō]',
+    u: '[uùúûüū]',
+    c: '[cç]',
+    n: '[nñ]'
+  };
+  const escaped = escapeRegex(term);
+  const pattern = escaped
+    .split('')
+    .map((char) => accentMap[char.toLowerCase()] || char)
+    .join('');
+  return new RegExp(pattern, 'i');
+};
+
 /**
  * Construit l'objet de filtre MongoDB pour l'historique
  */
@@ -15,14 +37,22 @@ const buildHistoryFilter = (query) => {
     filter.quantityType = query.quantityType.toUpperCase();
   }
 
+  // Recherche textuelle multi-mots non ordonnée
   if (query.search && query.search.trim()) {
-    const regex = new RegExp(query.search.trim(), 'i');
-    filter.$or = [
-      { productName: regex },
-      { productSku: regex },
-      { reason: regex },
-      { changedBy: regex }
-    ];
+    const words = query.search.trim().split(/\s+/).filter(Boolean);
+    if (words.length > 0) {
+      filter.$and = words.map((word) => {
+        const regex = makeAccentInsensitiveRegex(word);
+        return {
+          $or: [
+            { productName: regex },
+            { productSku: regex },
+            { reason: regex },
+            { changedBy: regex }
+          ]
+        };
+      });
+    }
   }
 
   if (query.startDate || query.endDate) {

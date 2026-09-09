@@ -6,15 +6,113 @@ const HistoryLog = require('../models/HistoryLog');
 const excelService = require('../services/excelService');
 
 /**
+ * Échappe les caractères réservés des expressions régulières
+ */
+const escapeRegex = (string) => {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
+/**
+ * Construit une regex insensible à la casse et aux accents
+ */
+const makeAccentInsensitiveRegex = (term, exactWord = false) => {
+  const accentMap = {
+    a: '[aàáâãäåā]',
+    e: '[eèéêëē]',
+    i: '[iìíîïī]',
+    o: '[oòóôõöō]',
+    u: '[uùúûüū]',
+    c: '[cç]',
+    n: '[nñ]'
+  };
+  const escaped = escapeRegex(term);
+  const pattern = escaped
+    .split('')
+    .map((char) => accentMap[char.toLowerCase()] || char)
+    .join('');
+  return new RegExp(exactWord ? '(?:^|\\s|[/-])' + pattern + '(?:$|\\s|[/-])' : pattern, 'i');
+};
+
+/**
+ * Calcule un score de pertinence et classe les produits (meilleures correspondances en tête)
+ */
+const sortProductsByRelevance = (products, searchStr) => {
+  if (!searchStr || !searchStr.trim()) return products;
+
+  const rawTrimmed = searchStr.trim().toLowerCase();
+  const words = searchStr.trim().split(/\s+/).filter(Boolean);
+  const wordRegexes = words.map((w) => makeAccentInsensitiveRegex(w));
+  const exactWordRegexes = words.map((w) => makeAccentInsensitiveRegex(w, true));
+  const fullPhraseRegex = makeAccentInsensitiveRegex(searchStr.trim());
+
+  const scored = products.map((p) => {
+    let score = 0;
+    const name = (p.name || '').toLowerCase();
+    const sku = (p.sku || '').toLowerCase();
+    const brand = (p.brand || '').toLowerCase();
+
+    // 1. Phrase complète présente exactement dans le nom
+    if (fullPhraseRegex.test(name)) {
+      score += 100;
+    }
+
+    // 2. Tous les mots présents dans le nom (dans n'importe quel ordre)
+    const allWordsInName = wordRegexes.every((r) => r.test(name));
+    if (allWordsInName) {
+      score += 60;
+    }
+
+    // 3. Mots entiers délimités présents dans le nom
+    exactWordRegexes.forEach((r) => {
+      if (r.test(name)) score += 20;
+    });
+
+    // 4. Correspondance exacte ou préfixe SKU
+    if (sku === rawTrimmed) {
+      score += 80;
+    } else if (sku.startsWith(rawTrimmed)) {
+      score += 40;
+    }
+
+    // 5. Mots présents dans la marque
+    wordRegexes.forEach((r) => {
+      if (r.test(brand)) score += 10;
+    });
+
+    return { product: p, score };
+  });
+
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    const dateB = b.product.createdAt ? new Date(b.product.createdAt).getTime() : 0;
+    const dateA = a.product.createdAt ? new Date(a.product.createdAt).getTime() : 0;
+    return dateB - dateA;
+  });
+
+  return scored.map((item) => item.product);
+};
+
+/**
  * Construit l'objet de filtre MongoDB à partir des query parameters
  */
 const buildProductFilter = (query) => {
   const filter = {};
 
-  // Recherche textuelle insensible à la casse sur nom ou SKU
+  // Recherche textuelle multi-mots non ordonnée (ex: "buzz 3" trouve "LCD ACE BUZZ 3")
   if (query.search && query.search.trim()) {
-    const searchRegex = new RegExp(query.search.trim(), 'i');
-    filter.$or = [{ name: searchRegex }, { sku: searchRegex }];
+    const words = query.search.trim().split(/\s+/).filter(Boolean);
+    if (words.length > 0) {
+      filter.$and = words.map((word) => {
+        const wordRegex = makeAccentInsensitiveRegex(word);
+        return {
+          $or: [
+            { name: wordRegex },
+            { sku: wordRegex },
+            { brand: wordRegex }
+          ]
+        };
+      });
+    }
   }
 
   // Filtre par catégorie
@@ -51,19 +149,33 @@ const buildProductFilter = (query) => {
 const getProducts = async (req, res, next) => {
   try {
     const filter = buildProductFilter(req.query);
+    const hasSearch = Boolean(req.query.search && req.query.search.trim());
 
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 20;
     const skip = (page - 1) * limit;
 
-    const total = await Product.countDocuments(filter);
+    let products;
+    let total;
 
-    const products = await Product.find(filter)
-      .populate('categoryId', 'name')
-      .populate('subCategoryId', 'name')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
+    if (hasSearch) {
+      // Lorsque la recherche est active, on récupère les correspondances pour trier par pertinence (score)
+      const allMatching = await Product.find(filter)
+        .populate('categoryId', 'name')
+        .populate('subCategoryId', 'name');
+
+      total = allMatching.length;
+      const sorted = sortProductsByRelevance(allMatching, req.query.search);
+      products = sorted.slice(skip, skip + limit);
+    } else {
+      total = await Product.countDocuments(filter);
+      products = await Product.find(filter)
+        .populate('categoryId', 'name')
+        .populate('subCategoryId', 'name')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit);
+    }
 
     return res.status(200).json({
       success: true,
@@ -429,10 +541,14 @@ const exportProducts = async (req, res, next) => {
   try {
     const filter = buildProductFilter(req.query);
 
-    const products = await Product.find(filter)
+    let products = await Product.find(filter)
       .populate('categoryId', 'name')
       .populate('subCategoryId', 'name')
       .sort({ createdAt: -1 });
+
+    if (req.query.search && req.query.search.trim()) {
+      products = sortProductsByRelevance(products, req.query.search);
+    }
 
     const buffer = await excelService.exportProductsToExcel(products);
 
