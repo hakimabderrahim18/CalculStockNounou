@@ -4,6 +4,7 @@ import { Warehouse, Store, ArrowRight, AlertTriangle } from 'lucide-react';
 
 export default function QuantityModal({ isOpen, onClose, product, quantityType, userRole = 'admin', onSave }) {
   const [newQuantity, setNewQuantity] = useState('');
+  const [deductFromWarehouse, setDeductFromWarehouse] = useState(true);
   const [changedBy, setChangedBy] = useState(userRole === 'magasinier' ? 'Magasinier' : userRole === 'reparateur' ? 'Réparateur' : 'Admin');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -16,6 +17,7 @@ export default function QuantityModal({ isOpen, onClose, product, quantityType, 
     if (product) {
       setNewQuantity(currentQuantity.toString());
       setError('');
+      setDeductFromWarehouse(true);
       setChangedBy(userRole === 'magasinier' ? 'Magasinier' : userRole === 'reparateur' ? 'Réparateur' : 'Admin');
     }
   }, [product, quantityType, userRole]);
@@ -25,7 +27,17 @@ export default function QuantityModal({ isOpen, onClose, product, quantityType, 
   const numericNewQuantity = Number(newQuantity);
   const isValidNumber = !isNaN(numericNewQuantity) && numericNewQuantity >= 0;
   const difference = isValidNumber ? numericNewQuantity - currentQuantity : 0;
-  const predictedTotal = isValidNumber ? numericNewQuantity + currentOtherQuantity : product.totalQuantity;
+
+  // Calcul du stock prévisionnel selon déduction entrepôt
+  const willDeductWarehouse = !isStock && deductFromWarehouse && difference > 0;
+  const isWarehouseInsufficient = willDeductWarehouse && (product.stockQuantity || 0) < difference;
+  const predictedWarehouse = willDeductWarehouse
+    ? Math.max(0, (product.stockQuantity || 0) - difference)
+    : (product.stockQuantity || 0);
+  const predictedStore = !isStock ? (isValidNumber ? numericNewQuantity : product.storeQuantity) : product.storeQuantity;
+  const predictedTotal = willDeductWarehouse
+    ? (product.totalQuantity || 0)
+    : (isStock ? (isValidNumber ? numericNewQuantity : 0) + product.storeQuantity : predictedWarehouse + predictedStore);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -38,6 +50,11 @@ export default function QuantityModal({ isOpen, onClose, product, quantityType, 
       return;
     }
 
+    if (isWarehouseInsufficient) {
+      setError(`Stock entrepôt insuffisant : seulement ${product.stockQuantity || 0} pièce(s) disponible(s) en entrepôt pour un transfert de ${difference} pièce(s).`);
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       setError('');
@@ -45,9 +62,14 @@ export default function QuantityModal({ isOpen, onClose, product, quantityType, 
         productId: product._id,
         quantityType,
         newQuantity: Math.floor(numericNewQuantity),
-        reason: 'Ajustement direct',
-        changedBy: changedBy.trim() || 'Admin',
-        role: userRole
+        reason: isStock
+          ? 'Ajustement direct entrepôt'
+          : willDeductWarehouse
+          ? `Transfert Entrepôt -> Magasin (+${difference} pcs)`
+          : 'Ajustement direct magasin',
+        changedBy: changedBy.trim() || (isStock ? 'Admin' : 'Magasinier'),
+        role: userRole,
+        deductFromWarehouse
       });
       onClose();
     } catch (err) {
@@ -112,13 +134,64 @@ export default function QuantityModal({ isOpen, onClose, product, quantityType, 
             </div>
           </div>
 
-          <div className="mt-3 pt-3 border-t border-blue-200/60 flex items-center justify-between text-xs text-slate-600">
-            <span>Nouveau stock total prévisionnel :</span>
-            <span className="font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-blue-200">
-              {predictedTotal} unités
-            </span>
+          <div className="mt-3 pt-3 border-t border-blue-200/60 flex flex-col gap-1.5 text-xs text-slate-600">
+            {willDeductWarehouse && (
+              <div className="flex items-center justify-between text-amber-900 bg-amber-100/70 px-2.5 py-1 rounded-lg border border-amber-200">
+                <span className="flex items-center gap-1 font-medium">
+                  <Warehouse className="w-3.5 h-3.5 text-amber-700" />
+                  Stock Entrepôt après transfert :
+                </span>
+                <span className="font-bold text-amber-950">
+                  {product.stockQuantity || 0} ➔ {predictedWarehouse} (-{difference})
+                </span>
+              </div>
+            )}
+            <div className="flex items-center justify-between">
+              <span>Nouveau stock total prévisionnel :</span>
+              <span className="font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-blue-200">
+                {predictedTotal} unités
+              </span>
+            </div>
           </div>
         </div>
+
+        {/* Option transfert depuis l'entrepôt */}
+        {!isStock && difference > 0 && (
+          <div className={`p-3.5 rounded-xl border transition ${
+            isWarehouseInsufficient && deductFromWarehouse
+              ? 'bg-rose-50/80 border-rose-200'
+              : 'bg-amber-50/70 border-amber-200'
+          }`}>
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={deductFromWarehouse}
+                onChange={(e) => setDeductFromWarehouse(e.target.checked)}
+                className="mt-0.5 w-4 h-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
+              />
+              <div className="text-xs">
+                <span className="font-bold text-slate-900 flex items-center gap-1.5">
+                  <Warehouse className="w-3.5 h-3.5 text-amber-700" />
+                  Déduire du stock entrepôt (Transfert)
+                </span>
+                <p className="text-slate-600 mt-1">
+                  Prélève automatiquement <strong>{difference} pièce(s)</strong> de l'entrepôt pour alimenter le magasin.
+                </p>
+                <div className="mt-2 flex items-center gap-3 text-[11px] font-medium text-slate-700">
+                  <span>Disponible en entrepôt : <strong className={isWarehouseInsufficient ? 'text-rose-600 font-bold' : 'text-slate-900'}>{product.stockQuantity || 0}</strong></span>
+                  <span>↳ Restant en entrepôt : <strong className={predictedWarehouse < 0 ? 'text-rose-600' : 'text-amber-900'}>{predictedWarehouse}</strong></span>
+                </div>
+              </div>
+            </label>
+
+            {isWarehouseInsufficient && deductFromWarehouse && (
+              <div className="mt-2.5 pt-2 border-t border-rose-200 flex items-center gap-1.5 text-xs font-semibold text-rose-700">
+                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                <span>Stock entrepôt insuffisant ({product.stockQuantity || 0} en stock). Approvisionnez d'abord l'entrepôt ou décochez pour un ajout direct.</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Champ Saisie Nouvelle Quantité */}
         <div>
@@ -214,7 +287,7 @@ export default function QuantityModal({ isOpen, onClose, product, quantityType, 
           </button>
           <button
             type="submit"
-            disabled={isSubmitting || !isValidNumber}
+            disabled={isSubmitting || !isValidNumber || (willDeductWarehouse && isWarehouseInsufficient)}
             className="flex-1 sm:flex-none px-6 py-3 sm:py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl shadow-sm shadow-blue-600/30 transition cursor-pointer text-center"
           >
             {isSubmitting ? 'Validation...' : 'Valider'}

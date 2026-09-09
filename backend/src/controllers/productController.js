@@ -261,10 +261,17 @@ const updateProduct = async (req, res, next) => {
  */
 const updateQuantity = async (req, res, next) => {
   try {
-    const { quantityType, newQuantity, reason, changedBy = 'Admin', role = 'admin' } = req.body;
+    const {
+      quantityType,
+      newQuantity,
+      reason,
+      changedBy = 'Admin',
+      role = 'admin',
+      deductFromWarehouse = true
+    } = req.body;
     const productId = req.params.id;
 
-    // Règle de sécurité : les magasiniers et réparateurs ne peuvent PAS manipuler le stock entrepôt
+    // Règle de sécurité : les magasiniers et réparateurs ne peuvent PAS manipuler le stock entrepôt directement
     const normalizedRole = (role || '').toLowerCase();
     if ((normalizedRole === 'magasinier' || normalizedRole === 'reparateur') && quantityType === 'STOCK') {
       return res.status(403).json({
@@ -289,30 +296,93 @@ const updateQuantity = async (req, res, next) => {
     const oldValue = quantityType === 'STOCK' ? product.stockQuantity : product.storeQuantity;
     const difference = targetQuantity - oldValue;
 
+    let historyEntry;
+    let successMessage = 'Quantité mise à jour et historique enregistré avec succès';
+
     // Mise à jour de la quantité ciblée
     if (quantityType === 'STOCK') {
       product.stockQuantity = targetQuantity;
+      product.totalQuantity = product.stockQuantity + product.storeQuantity;
+      await product.save();
+
+      historyEntry = await HistoryLog.create({
+        productId: product._id,
+        productName: product.name,
+        productSku: product.sku,
+        quantityType: 'STOCK',
+        oldValue,
+        newValue: targetQuantity,
+        difference,
+        reason: reason && reason.trim() ? reason.trim() : 'Ajustement direct entrepôt',
+        changedBy: changedBy && changedBy.trim() ? changedBy.trim() : 'Admin',
+        date: new Date()
+      });
     } else {
-      product.storeQuantity = targetQuantity;
+      // quantityType === 'STORE'
+      const shouldDeduct = deductFromWarehouse !== false && difference > 0;
+
+      if (shouldDeduct) {
+        if (product.stockQuantity < difference) {
+          return res.status(400).json({
+            success: false,
+            message: `Stock entrepôt insuffisant : impossible d'ajouter ${difference} pièce(s) au magasin car l'entrepôt ne dispose que de ${product.stockQuantity} pièce(s).`
+          });
+        }
+
+        const oldWarehouseStock = product.stockQuantity;
+        product.stockQuantity -= difference;
+        product.storeQuantity = targetQuantity;
+        product.totalQuantity = product.stockQuantity + product.storeQuantity;
+        await product.save();
+
+        // Enregistrement de l'historique Magasin (+difference)
+        historyEntry = await HistoryLog.create({
+          productId: product._id,
+          productName: product.name,
+          productSku: product.sku,
+          quantityType: 'STORE',
+          oldValue,
+          newValue: targetQuantity,
+          difference,
+          reason: reason && reason.trim() ? reason.trim() : `Transfert depuis l'entrepôt (+${difference})`,
+          changedBy: changedBy && changedBy.trim() ? changedBy.trim() : 'Magasinier',
+          date: new Date()
+        });
+
+        // Enregistrement de l'historique Entrepôt (-difference pour traçabilité complète)
+        await HistoryLog.create({
+          productId: product._id,
+          productName: product.name,
+          productSku: product.sku,
+          quantityType: 'STOCK',
+          oldValue: oldWarehouseStock,
+          newValue: product.stockQuantity,
+          difference: -difference,
+          reason: `Transfert vers Magasin (-${difference})`,
+          changedBy: changedBy && changedBy.trim() ? changedBy.trim() : 'Magasinier',
+          date: new Date()
+        });
+
+        successMessage = `${difference} pièce(s) ajoutée(s) au magasin et déduite(s) de l'entrepôt avec succès`;
+      } else {
+        product.storeQuantity = targetQuantity;
+        product.totalQuantity = product.stockQuantity + product.storeQuantity;
+        await product.save();
+
+        historyEntry = await HistoryLog.create({
+          productId: product._id,
+          productName: product.name,
+          productSku: product.sku,
+          quantityType: 'STORE',
+          oldValue,
+          newValue: targetQuantity,
+          difference,
+          reason: reason && reason.trim() ? reason.trim() : 'Ajustement magasin',
+          changedBy: changedBy && changedBy.trim() ? changedBy.trim() : 'Magasinier',
+          date: new Date()
+        });
+      }
     }
-
-    // Recalcul du total
-    product.totalQuantity = product.stockQuantity + product.storeQuantity;
-    await product.save();
-
-    // Création de l'entrée d'historique
-    const historyEntry = await HistoryLog.create({
-      productId: product._id,
-      productName: product.name,
-      productSku: product.sku,
-      quantityType,
-      oldValue,
-      newValue: targetQuantity,
-      difference,
-      reason: reason && reason.trim() ? reason.trim() : 'Ajustement manuel',
-      changedBy: changedBy && changedBy.trim() ? changedBy.trim() : 'Admin',
-      date: new Date()
-    });
 
     const populatedProduct = await Product.findById(product._id)
       .populate('categoryId', 'name')
@@ -320,7 +390,7 @@ const updateQuantity = async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
-      message: 'Quantité mise à jour et historique enregistré avec succès',
+      message: successMessage,
       data: {
         product: populatedProduct,
         historyLog: historyEntry

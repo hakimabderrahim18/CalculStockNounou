@@ -117,9 +117,9 @@ export default function ProductsPage({ onShowToast, onNavigateToHistory, userRol
   };
 
   // Handler sauvegarde modification quantité
-  const handleSaveQuantity = async ({ productId, quantityType, newQuantity, reason, changedBy }) => {
-    await updateQuantity(productId, { quantityType, newQuantity, reason, changedBy });
-    onShowToast('success', `Quantité mise à jour avec succès (Motif : ${reason})`);
+  const handleSaveQuantity = async ({ productId, quantityType, newQuantity, reason, changedBy, deductFromWarehouse }) => {
+    const res = await updateQuantity(productId, { quantityType, newQuantity, reason, changedBy, deductFromWarehouse });
+    onShowToast('success', res?.data?.message || `Quantité mise à jour avec succès (Motif : ${reason})`);
     loadProducts();
   };
 
@@ -250,9 +250,9 @@ export default function ProductsPage({ onShowToast, onNavigateToHistory, userRol
         </div>
       </div>
 
-      {/* Barre d'actions rapides Entrepôt pour Admin */}
+      {/* Barre d'actions rapides Entrepôt & Stocks pour Admin */}
       {userRole === 'admin' && (
-        <div className="flex items-center justify-end gap-2 text-xs">
+        <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
           <button
             type="button"
             onClick={handleResetWarehouseStocks}
@@ -261,6 +261,15 @@ export default function ProductsPage({ onShowToast, onNavigateToHistory, userRol
           >
             <Warehouse className="w-3.5 h-3.5 text-amber-700" />
             <span>Vider stock entrepôt (mettre à 0)</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleResetAllStocks}
+            className="w-full sm:w-auto justify-center flex items-center gap-1.5 px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-900 border border-rose-200 rounded-xl font-semibold transition cursor-pointer shadow-2xs"
+            title="Remet à 0 pièces le stock entrepôt et le stock magasin pour tous les produits"
+          >
+            <RotateCcw className="w-3.5 h-3.5 text-rose-700" />
+            <span>Remettre tous les stocks à 0 (Entrepôt & Magasin)</span>
           </button>
         </div>
       )}

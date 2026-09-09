@@ -45,6 +45,7 @@ const validateQuantityUpdate = validate([
     .withMessage('La nouvelle quantité est requise')
     .isInt({ min: 0 })
     .withMessage('La quantité ne peut pas être négative'),
+  body('deductFromWarehouse').optional().isBoolean(),
   body('reason').optional().trim(),
   body('changedBy').optional().trim()
 ]);
