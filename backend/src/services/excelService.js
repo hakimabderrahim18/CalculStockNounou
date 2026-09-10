@@ -148,7 +148,7 @@ const parseCleanNumber = (val) => {
  */
 const importProductsFromExcel = async (
   fileBuffer,
-  { autoCreateCategories = true, setStockToZero = false } = {}
+  { autoCreateCategories = true, setStockToZero = false, preserveExistingStocks = false } = {}
 ) => {
   const rows = readAnySpreadsheetRows(fileBuffer);
   if (!rows || rows.length < 2) {
@@ -289,31 +289,38 @@ const importProductsFromExcel = async (
       let product = await Product.findOne({ sku: item.sku });
 
       if (product) {
-        const oldStock = product.stockQuantity;
         product.name = item.name;
         product.categoryId = category._id;
         product.subCategoryId = subCategory._id;
-        product.stockQuantity = item.stockQuantity;
-        if (item.storeQuantity > 0) product.storeQuantity = item.storeQuantity;
         if (item.brand) product.brand = item.brand;
         if (item.price > 0) product.price = item.price;
         if (item.image) product.image = item.image;
-        product.totalQuantity = product.stockQuantity + product.storeQuantity;
 
-        await product.save();
+        if (!preserveExistingStocks) {
+          const oldStock = product.stockQuantity;
+          product.stockQuantity = item.stockQuantity;
+          if (item.storeQuantity > 0) product.storeQuantity = item.storeQuantity;
+          product.totalQuantity = product.stockQuantity + product.storeQuantity;
 
-        if (item.stockQuantity !== oldStock) {
-          await HistoryLog.create({
-            productId: product._id,
-            productName: product.name,
-            productSku: product.sku,
-            quantityType: 'STOCK',
-            oldValue: oldStock,
-            newValue: item.stockQuantity,
-            difference: item.stockQuantity - oldStock,
-            reason: 'Mise à jour via Import Excel',
-            changedBy: 'Import Excel'
-          });
+          await product.save();
+
+          if (item.stockQuantity !== oldStock) {
+            await HistoryLog.create({
+              productId: product._id,
+              productName: product.name,
+              productSku: product.sku,
+              quantityType: 'STOCK',
+              oldValue: oldStock,
+              newValue: item.stockQuantity,
+              difference: item.stockQuantity - oldStock,
+              reason: 'Mise à jour via Import Excel',
+              changedBy: 'Import Excel'
+            });
+          }
+        } else {
+          // Préservation des stocks existants : on recalcule simplement le total avec les quantités actuelles
+          product.totalQuantity = (Number(product.stockQuantity) || 0) + (Number(product.storeQuantity) || 0);
+          await product.save();
         }
       } else {
         let createdProduct;

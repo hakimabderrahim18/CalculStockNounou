@@ -605,9 +605,11 @@ const importProducts = async (req, res, next) => {
 
     const autoCreate = req.query.autoCreateCategories !== 'false';
     const setStockToZero = req.query.setStockToZero === 'true';
+    const preserveExistingStocks = req.query.preserveExistingStocks === 'true';
     const result = await excelService.importProductsFromExcel(req.file.buffer, {
       autoCreateCategories: autoCreate,
-      setStockToZero
+      setStockToZero,
+      preserveExistingStocks
     });
 
     return res.status(200).json({

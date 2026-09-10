@@ -7,6 +7,7 @@ export default function ExcelImportModal({ isOpen, onClose, onImportSuccess }) {
   const [file, setFile] = useState(null);
   const [autoCreate, setAutoCreate] = useState(true);
   const [setStockToZero, setSetStockToZero] = useState(false);
+  const [preserveExistingStocks, setPreserveExistingStocks] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [report, setReport] = useState(null);
@@ -20,6 +21,7 @@ export default function ExcelImportModal({ isOpen, onClose, onImportSuccess }) {
     setProgress(0);
     setIsUploading(false);
     setSetStockToZero(false);
+    setPreserveExistingStocks(false);
   };
 
   const handleClose = () => {
@@ -58,7 +60,12 @@ export default function ExcelImportModal({ isOpen, onClose, onImportSuccess }) {
       setErrorMsg('');
       setProgress(40);
 
-      const response = await importProductsExcel(file, autoCreate, setStockToZero);
+      const response = await importProductsExcel(
+        file,
+        autoCreate,
+        setStockToZero,
+        preserveExistingStocks
+      );
       setProgress(100);
       setReport(response.data.data);
 
@@ -228,16 +235,41 @@ export default function ExcelImportModal({ isOpen, onClose, onImportSuccess }) {
                 </label>
               </div>
 
-              <div className="flex items-center gap-2 text-xs text-slate-700 bg-amber-50/60 p-3 rounded-xl border border-amber-200">
+              <div className="flex items-start gap-2.5 text-xs text-slate-700 bg-emerald-50/70 p-3 rounded-xl border border-emerald-200">
+                <input
+                  type="checkbox"
+                  id="preserveExistingStocks"
+                  checked={preserveExistingStocks}
+                  onChange={(e) => {
+                    setPreserveExistingStocks(e.target.checked);
+                    if (e.target.checked) setSetStockToZero(false);
+                  }}
+                  className="w-4 h-4 mt-0.5 text-emerald-600 rounded border-emerald-300 focus:ring-emerald-500 cursor-pointer"
+                />
+                <label htmlFor="preserveExistingStocks" className="cursor-pointer">
+                  <span className="font-semibold text-emerald-900 block">
+                    Conserver les stocks existants (ne pas écraser Entrepôt et Magasin)
+                  </span>
+                  <span className="text-emerald-700 text-[11px] block mt-0.5">
+                    Les quantités en stock des produits déjà enregistrés resteront inchangées. Seuls les nouveaux produits recevront le stock du fichier.
+                  </span>
+                </label>
+              </div>
+
+              <div className="flex items-start gap-2.5 text-xs text-slate-700 bg-amber-50/60 p-3 rounded-xl border border-amber-200">
                 <input
                   type="checkbox"
                   id="setStockToZero"
                   checked={setStockToZero}
-                  onChange={(e) => setSetStockToZero(e.target.checked)}
-                  className="w-4 h-4 text-amber-600 rounded border-amber-300 focus:ring-amber-500 cursor-pointer"
+                  onChange={(e) => {
+                    setSetStockToZero(e.target.checked);
+                    if (e.target.checked) setPreserveExistingStocks(false);
+                  }}
+                  className="w-4 h-4 mt-0.5 text-amber-600 rounded border-amber-300 focus:ring-amber-500 cursor-pointer"
                 />
                 <label htmlFor="setStockToZero" className="cursor-pointer font-medium text-amber-900">
-                  Initialiser tous les stocks à <strong>0 pièce</strong> (ignorer les quantités du fichier Excel)
+                  <span className="block font-semibold">Initialiser tous les stocks à <strong>0 pièce</strong></span>
+                  <span className="text-amber-700 text-[11px] block mt-0.5">Ignore les quantités du fichier Excel et force les stocks à 0.</span>
                 </label>
               </div>
             </div>

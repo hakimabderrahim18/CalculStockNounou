@@ -66,11 +66,16 @@ export const downloadProductTemplate = async () => {
 };
 
 // Import de produits Excel avec FormData
-export const importProductsExcel = (file, autoCreateCategories = true, setStockToZero = false) => {
+export const importProductsExcel = (
+  file,
+  autoCreateCategories = true,
+  setStockToZero = false,
+  preserveExistingStocks = false
+) => {
   const formData = new FormData();
   formData.append('file', file);
   return api.post(
-    `/products/import?autoCreateCategories=${autoCreateCategories}&setStockToZero=${setStockToZero}`,
+    `/products/import?autoCreateCategories=${autoCreateCategories}&setStockToZero=${setStockToZero}&preserveExistingStocks=${preserveExistingStocks}`,
     formData,
     {
       headers: { 'Content-Type': 'multipart/form-data' }
