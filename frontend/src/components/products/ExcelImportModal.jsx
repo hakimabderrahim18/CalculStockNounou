@@ -73,9 +73,24 @@ export default function ExcelImportModal({ isOpen, onClose, onImportSuccess }) {
         onImportSuccess();
       }
     } catch (err) {
-      setErrorMsg(
-        err.response?.data?.message || "Erreur lors de l'importation du fichier Excel."
-      );
+      console.error("Erreur détaillée lors de l'importation Excel:", err);
+      let message = "Erreur lors de l'importation du fichier Excel.";
+      if (err.response?.data?.message) {
+        message = err.response.data.message;
+      } else if (err.response?.data?.error) {
+        message = err.response.data.error;
+      } else if (err.response?.status === 413) {
+        message = "Le fichier Excel est trop volumineux pour le serveur (Erreur 413 : Payload trop lourd).";
+      } else if (err.response?.status === 504) {
+        message = "Délai d'attente serveur dépassé (Erreur 504 : Gateway Timeout). Réduisez la taille du fichier.";
+      } else if (err.response?.status === 502) {
+        message = "Le serveur backend ne répond pas (Erreur 502 : Bad Gateway).";
+      } else if (err.code === 'ECONNABORTED' || err.message?.toLowerCase().includes('timeout')) {
+        message = "Délai d'attente dépassé (Timeout). Le traitement du fichier prend trop de temps.";
+      } else if (err.message) {
+        message = err.message;
+      }
+      setErrorMsg(message);
     } finally {
       setIsUploading(false);
     }

@@ -78,7 +78,7 @@ export const importProductsExcel = (
     `/products/import?autoCreateCategories=${autoCreateCategories}&setStockToZero=${setStockToZero}&preserveExistingStocks=${preserveExistingStocks}`,
     formData,
     {
-      headers: { 'Content-Type': 'multipart/form-data' }
+      timeout: 180000 // 3 minutes de délai pour gros volumes
     }
   );
 };
