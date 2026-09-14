@@ -106,14 +106,25 @@ const detectColumnsFromHeaders = (headerRow, applyFallbacks = true) => {
       colMap.sku = colIdx;
     }
     // 5. Stock Magasin
-    else if (/stock.*magasin|magasin|qte.*magasin/.test(h) && colMap.storeQuantity === -1) {
+    else if (/stock.*magasin|qte.*magasin/.test(h) && colMap.storeQuantity === -1) {
       colMap.storeQuantity = colIdx;
     }
-    // 6. Stock Entrepôt / Unité
-    else if (/stock.*unite|stock.*entrepot|stock|qte|quantite/.test(h) && colMap.stockQuantity === -1) {
+    // 6. Stock Unité / Stock Compté / Stock Physique (priorité absolue à Stock Unité)
+    else if (
+      /(stock.*unite|qte.*unite|\bunite\b|stock.*compte|stock.*physique|stock.*reel)/.test(h) &&
+      colMap.stockQuantity === -1
+    ) {
       colMap.stockQuantity = colIdx;
     }
-    // 7. Prix
+    // 7. Stock Entrepôt / Stock général
+    else if (
+      /(stock.*entrepot|stock|qte|quantite)/.test(h) &&
+      !/magasin|boutique|prix|tarif/.test(h) &&
+      colMap.stockQuantity === -1
+    ) {
+      colMap.stockQuantity = colIdx;
+    }
+    // 8. Prix
     else if (/prix.*1.*ttc|prix.*ttc|prix|tarif/.test(h) && colMap.price === -1) {
       colMap.price = colIdx;
     }
@@ -452,8 +463,37 @@ const compareStockWithSpreadsheet = async (fileBuffer, { performedBy = 'Admin', 
     throw new Error('Le fichier est vide ou ne contient aucune ligne de données.');
   }
 
-  const headerRow = rows[0];
-  const colMap = detectColumnsFromHeaders(headerRow);
+  // Détection intelligente de la ligne d'en-tête parmi les 10 premières lignes
+  let headerRowIndex = 0;
+  let bestColMap = null;
+  let maxMatchedCols = -1;
+
+  for (let r = 0; r < Math.min(rows.length, 10); r++) {
+    const candidateRow = rows[r];
+    if (!candidateRow || !Array.isArray(candidateRow) || candidateRow.length === 0) continue;
+    const testMap = detectColumnsFromHeaders(candidateRow, false);
+    let matched = 0;
+    if (testMap.name !== -1) matched += 4;
+    if (testMap.sku !== -1) matched += 3;
+    if (testMap.stockQuantity !== -1) matched += 5; // priorité forte à la détection du stock
+    if (testMap.category !== -1) matched += 2;
+    if (testMap.price !== -1) matched += 2;
+
+    if (matched > maxMatchedCols && matched >= 3) {
+      maxMatchedCols = matched;
+      headerRowIndex = r;
+      bestColMap = testMap;
+    }
+  }
+
+  const headerRow = rows[headerRowIndex];
+  const colMap = bestColMap
+    ? {
+        ...bestColMap,
+        name: bestColMap.name !== -1 ? bestColMap.name : 0,
+        stockQuantity: bestColMap.stockQuantity !== -1 ? bestColMap.stockQuantity : 1
+      }
+    : detectColumnsFromHeaders(headerRow, true);
 
   // Charger tous les produits actuellement en base avec catégories
   const dbProducts = await Product.find({})
@@ -480,7 +520,7 @@ const compareStockWithSpreadsheet = async (fileBuffer, { performedBy = 'Admin', 
   let totalLossValue = 0;
   let totalSurplusValue = 0;
 
-  for (let i = 1; i < rows.length; i++) {
+  for (let i = headerRowIndex + 1; i < rows.length; i++) {
     const row = rows[i];
     const nameRaw = colMap.name !== -1 ? row[colMap.name] : '';
     const skuRaw = colMap.sku !== -1 ? row[colMap.sku] : '';

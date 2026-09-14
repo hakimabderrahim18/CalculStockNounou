@@ -727,11 +727,11 @@ export default function LossAnalysisPage({ onShowToast }) {
                             </div>
 
                             <div className="border-x border-slate-200">
-                              <div className="text-[10px] font-bold text-slate-500 uppercase">Fichier Réel</div>
+                              <div className="text-[10px] font-bold text-slate-500 uppercase">Stock Unité</div>
                               <div className="text-base font-black text-rose-950 mt-0.5">
                                 {item.physicalStock}
                               </div>
-                              <div className="text-[9px] text-slate-400">Compté</div>
+                              <div className="text-[9px] text-slate-400">Compté fichier</div>
                             </div>
 
                             <div>
@@ -780,7 +780,7 @@ export default function LossAnalysisPage({ onShowToast }) {
                           Total Logiciel
                         </th>
                         <th className="py-3 px-3 text-right bg-rose-50/50 text-rose-950 font-black">
-                          Stock Compté (Fichier)
+                          Stock Compté (Stock Unité)
                         </th>
                         <th className="py-3 px-3 text-right font-black">Décalage (Écart)</th>
                         <th className="py-3 px-3 text-center">Statut</th>
