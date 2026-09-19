@@ -13,6 +13,9 @@ router.post('/import', upload.single('file'), productController.importProducts);
 router.post('/reset-all-stocks', productController.resetAllStocks);
 router.post('/reset-warehouse-stocks', productController.resetWarehouseStocks);
 
+// Route de suppression groupée
+router.post('/bulk-delete', productController.bulkDeleteProducts);
+
 // Routes CRUD principales
 router.get('/', productController.getProducts);
 router.get('/:id', productController.getProductById);

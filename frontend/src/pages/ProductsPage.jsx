@@ -9,7 +9,8 @@ import {
   exportProductsExcel,
   downloadProductTemplate,
   resetAllStocks,
-  resetWarehouseStocks
+  resetWarehouseStocks,
+  bulkDeleteProducts
 } from '../api/client';
 import ProductFilterBar from '../components/products/ProductFilterBar';
 import ProductTable from '../components/products/ProductTable';
@@ -23,6 +24,8 @@ export default function ProductsPage({ onShowToast, onNavigateToHistory, userRol
   const [categories, setCategories] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
+  const [selectedProductIds, setSelectedProductIds] = useState([]);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   // Filtres & Pagination
   const [filters, setFilters] = useState({
@@ -90,10 +93,12 @@ export default function ProductsPage({ onShowToast, onNavigateToHistory, userRol
 
   // Handlers pour filtres
   const handleFilterChange = (newFilters) => {
+    setSelectedProductIds([]);
     setFilters((prev) => ({ ...prev, ...newFilters }));
   };
 
   const handleResetFilters = () => {
+    setSelectedProductIds([]);
     setFilters({
       search: '',
       category: '',
@@ -106,6 +111,7 @@ export default function ProductsPage({ onShowToast, onNavigateToHistory, userRol
   };
 
   const handlePageChange = (newPage) => {
+    setSelectedProductIds([]);
     setFilters((prev) => ({ ...prev, page: newPage }));
   };
 
@@ -151,9 +157,50 @@ export default function ProductsPage({ onShowToast, onNavigateToHistory, userRol
       try {
         await deleteProduct(product._id);
         onShowToast('success', 'Produit supprimé avec succès.');
+        setSelectedProductIds((prev) => prev.filter((id) => id !== product._id));
         loadProducts();
       } catch (err) {
         onShowToast('error', err.response?.data?.message || 'Erreur lors de la suppression.');
+      }
+    }
+  };
+
+  // Handlers sélection multiple & suppression groupée
+  const handleToggleSelectProduct = (productId) => {
+    setSelectedProductIds((prev) =>
+      prev.includes(productId) ? prev.filter((id) => id !== productId) : [...prev, productId]
+    );
+  };
+
+  const handleToggleSelectAll = () => {
+    const currentList = Array.isArray(products) ? products : [];
+    const currentIds = currentList.map((p) => p._id);
+    const allSelected = currentIds.length > 0 && currentIds.every((id) => selectedProductIds.includes(id));
+    if (allSelected) {
+      setSelectedProductIds((prev) => prev.filter((id) => !currentIds.includes(id)));
+    } else {
+      setSelectedProductIds((prev) => Array.from(new Set([...prev, ...currentIds])));
+    }
+  };
+
+  const handleClearSelection = () => {
+    setSelectedProductIds([]);
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedProductIds.length === 0) return;
+    const count = selectedProductIds.length;
+    if (window.confirm(`Êtes-vous sûr de vouloir supprimer définitivement les ${count} produits sélectionnés ? Cette action supprimera également leur historique.`)) {
+      try {
+        setIsBulkDeleting(true);
+        const res = await bulkDeleteProducts(selectedProductIds);
+        onShowToast('success', res.data?.message || `${count} produits supprimés avec succès.`);
+        setSelectedProductIds([]);
+        loadProducts();
+      } catch (err) {
+        onShowToast('error', err.response?.data?.message || 'Erreur lors de la suppression groupée.');
+      } finally {
+        setIsBulkDeleting(false);
       }
     }
   };
@@ -293,6 +340,12 @@ export default function ProductsPage({ onShowToast, onNavigateToHistory, userRol
         isLoading={isLoading}
         pagination={pagination}
         userRole={userRole}
+        selectedProductIds={selectedProductIds}
+        onToggleSelectProduct={handleToggleSelectProduct}
+        onToggleSelectAll={handleToggleSelectAll}
+        onClearSelection={handleClearSelection}
+        onBulkDelete={handleBulkDelete}
+        isBulkDeleting={isBulkDeleting}
         onPageChange={handlePageChange}
         onOpenQuantityModal={handleOpenQuantityModal}
         onEditProduct={handleOpenEditModal}

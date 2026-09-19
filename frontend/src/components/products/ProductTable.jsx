@@ -6,6 +6,12 @@ export default function ProductTable({
   isLoading,
   pagination,
   userRole = 'admin',
+  selectedProductIds = [],
+  onToggleSelectProduct,
+  onToggleSelectAll,
+  onClearSelection,
+  onBulkDelete,
+  isBulkDeleting = false,
   onPageChange,
   onOpenQuantityModal,
   onEditProduct,
@@ -35,18 +41,66 @@ export default function ProductTable({
 
   const isWarehouseLocked = userRole === 'magasinier' || userRole === 'reparateur';
 
+  const currentPageIds = products?.map((p) => p._id) || [];
+  const isAllCurrentSelected = currentPageIds.length > 0 && currentPageIds.every((id) => selectedProductIds.includes(id));
+  const isSomeCurrentSelected = currentPageIds.some((id) => selectedProductIds.includes(id)) && !isAllCurrentSelected;
+
   return (
     <div className="space-y-4">
+      {/* ================= BANDEAU D'ACTIONS GROUPÉES ================= */}
+      {selectedProductIds.length > 0 && (
+        <div className="sticky top-2 z-30 bg-slate-900 text-white rounded-2xl p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3 shadow-lg border border-slate-800 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center gap-3">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-white font-bold text-xs">
+              {selectedProductIds.length}
+            </span>
+            <span className="text-xs sm:text-sm font-semibold">
+              produit{selectedProductIds.length > 1 ? 's' : ''} sélectionné{selectedProductIds.length > 1 ? 's' : ''}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClearSelection}
+              className="px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl transition cursor-pointer"
+            >
+              Désélectionner tout
+            </button>
+            <button
+              type="button"
+              onClick={onBulkDelete}
+              disabled={isBulkDeleting}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white text-xs font-bold rounded-xl transition shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>{isBulkDeleting ? 'Suppression...' : `Supprimer (${selectedProductIds.length})`}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ================= VUE MOBILE (Cartes tactiles fluides < md) ================= */}
       <div className="block md:hidden space-y-3">
-        {products.map((p) => (
-          <div
-            key={p._id}
-            className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs space-y-3"
-          >
-            {/* Haut de carte : Image + Nom + SKU + Marque + Catégorie */}
-            <div className="flex items-start gap-3">
-              {p.image ? (
+        {products.map((p) => {
+          const isSelected = selectedProductIds.includes(p._id);
+          return (
+            <div
+              key={p._id}
+              className={`bg-white rounded-2xl border p-4 shadow-2xs space-y-3 transition-colors ${
+                isSelected ? 'border-blue-400 bg-blue-50/20 ring-2 ring-blue-100' : 'border-slate-200/90'
+              }`}
+            >
+              {/* Haut de carte : Image + Nom + SKU + Marque + Catégorie */}
+              <div className="flex items-start gap-3">
+                <div className="pt-0.5 flex-shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => onToggleSelectProduct?.(p._id)}
+                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  />
+                </div>
+                {p.image ? (
                 <img
                   src={p.image}
                   alt={p.name}
@@ -196,8 +250,9 @@ export default function ProductTable({
               </div>
             </div>
           </div>
-        ))}
-      </div>
+        );
+      })}
+    </div>
 
       {/* ================= VUE DESKTOP (Tableau complet >= md) ================= */}
       <div className="hidden md:block bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
@@ -205,6 +260,18 @@ export default function ProductTable({
           <table className="w-full text-left border-collapse text-sm">
             <thead>
               <tr className="bg-slate-50/80 text-slate-600 text-xs uppercase font-semibold tracking-wider border-b border-slate-200">
+                <th className="py-3.5 px-4 w-10 text-center">
+                  <input
+                    type="checkbox"
+                    ref={(el) => {
+                      if (el) el.indeterminate = isSomeCurrentSelected;
+                    }}
+                    checked={isAllCurrentSelected}
+                    onChange={onToggleSelectAll}
+                    title="Tout sélectionner / désélectionner sur cette page"
+                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  />
+                </th>
                 <th className="py-3.5 px-4">Produit & SKU</th>
                 <th className="py-3.5 px-4">Catégorie / Sous-catégorie</th>
                 <th className="py-3.5 px-4 text-center">
@@ -225,10 +292,25 @@ export default function ProductTable({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {products.map((p) => (
-                <tr key={p._id} className="hover:bg-slate-50/60 transition-colors group">
-                  {/* Nom & SKU */}
-                  <td className="py-3.5 px-4">
+              {products.map((p) => {
+                const isSelected = selectedProductIds.includes(p._id);
+                return (
+                  <tr
+                    key={p._id}
+                    className={`transition-colors group ${
+                      isSelected ? 'bg-blue-50/50 hover:bg-blue-50/80' : 'hover:bg-slate-50/60'
+                    }`}
+                  >
+                    <td className="py-3.5 px-4 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => onToggleSelectProduct?.(p._id)}
+                        className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      />
+                    </td>
+                    {/* Nom & SKU */}
+                    <td className="py-3.5 px-4">
                     <div className="flex items-center gap-3">
                       {p.image ? (
                         <img
@@ -348,8 +430,9 @@ export default function ProductTable({
                       </button>
                     </div>
                   </td>
-                </tr>
-              ))}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

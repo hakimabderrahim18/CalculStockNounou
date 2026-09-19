@@ -525,10 +525,37 @@ const deleteProduct = async (req, res, next) => {
     }
 
     await Product.findByIdAndDelete(req.params.id);
+    await HistoryLog.deleteMany({ productId: req.params.id });
 
     return res.status(200).json({
       success: true,
       message: 'Produit supprimé avec succès'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Suppression multiple de produits par leurs identifiants
+ */
+const bulkDeleteProducts = async (req, res, next) => {
+  try {
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Veuillez fournir une liste d\'identifiants à supprimer'
+      });
+    }
+
+    const result = await Product.deleteMany({ _id: { $in: ids } });
+    await HistoryLog.deleteMany({ productId: { $in: ids } });
+
+    return res.status(200).json({
+      success: true,
+      message: `${result.deletedCount} produit(s) supprimé(s) avec succès.`,
+      deletedCount: result.deletedCount
     });
   } catch (error) {
     next(error);
@@ -765,6 +792,7 @@ module.exports = {
   updateProduct,
   updateQuantity,
   deleteProduct,
+  bulkDeleteProducts,
   exportProducts,
   getProductTemplate,
   importProducts,
